@@ -201,7 +201,7 @@ function renderPage(index) {
             <div class="question-wrapper">
 
                 <div class="question-header">
-                    <h2>Question ${question.questionNumber}/57</h2>
+                    <h2>Question ${question.questionNumber}/61</h2>
                 </div>
 
                 <div class="navigation-buttons">
