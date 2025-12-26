@@ -36,15 +36,18 @@ auth.onAuthStateChanged(async (user) => {
     }
 
     // User is logged in
-    currentUser = user;
-    console.log("Logged in:", user.email, "UID:", user.uid);
+    currentUser = {
+    ...user,
+    email: normalizeEmail(user.email),
+    uid: normalizeEmail(user.email)   // <-- KEY CHANGE: docId becomes email
+    };
+    console.log("Logged in:", currentUser.email, "DOC ID:", currentUser.uid);
 
     // Show quiz
     document.getElementById("login-page").style.display = "none";
     document.getElementById("quiz-container").style.display = "block";
 
     // Load saved responses FIRST
-    await seedFromPreloadIfNeeded();
     await loadExistingResponses();
 
     // Only load questions once
@@ -53,16 +56,16 @@ auth.onAuthStateChanged(async (user) => {
     }
 });
 
-async function findUidByEmail(email) {
-    const snap = await db
-        .collection("responses_internal")
-        .where("email", "==", normalizeEmail(email))
-        .limit(1)
-        .get();
+// async function findUidByEmail(email) {
+//     const snap = await db
+//         .collection("responses_internal")
+//         .where("email", "==", normalizeEmail(email))
+//         .limit(1)
+//         .get();
 
-    if (!snap.empty) return snap.docs[0].id;
-    return null;
-}
+//     if (!snap.empty) return snap.docs[0].id;
+//     return null;
+// }
 
 // ------------------ GOOGLE LOGIN ------------------
 
@@ -100,13 +103,12 @@ async function emailOnlyLogin() {
         errorDiv.style.visibility = "hidden";
     }
 
-    // Create local-only user object
-    const existingUid = await findUidByEmail(email);
+    const emailKey = normalizeEmail(email);
 
     currentUser = {
-        email: normalizeEmail(email),
-        uid: existingUid || generateFakeUID(),
-        isLocalUser: true
+    email: emailKey,
+    uid: emailKey,          // <-- same docId rule
+    isLocalUser: true
     };
 
     console.log("Email-only login:", currentUser);
@@ -124,24 +126,19 @@ async function emailOnlyLogin() {
     }
 }
 
-// Load previous email-only responses
 async function loadExistingResponsesByEmail(email) {
-    const snap = await db
-        .collection("responses_internal")
-        .where("email", "==", email)
-        .limit(1)
-        .get();
+  const emailKey = normalizeEmail(email);
+  const snap = await db.collection("responses_internal").doc(emailKey).get();
 
-    if (!snap.empty) {
-        const data = snap.docs[0].data();
-        responses = data.responses || {};
-
-        // reuse old uid to keep consistency
-        currentUser.uid = data.uid;
-
-        document.getElementById("researcher-name").value = data.name || "";
-        console.log("Loaded saved email-only responses.");
-    }
+  if (snap.exists) {
+    const data = snap.data();
+    responses = data.responses || {};
+    document.getElementById("researcher-name").value = data.name || "";
+    console.log("Loaded saved email-only responses.");
+  } else {
+    responses = {};
+    console.log("No existing email-only responses found.");
+  }
 }
 
 // ------------------ PRELOAD RESPONSES BY EMAIL ------------------
