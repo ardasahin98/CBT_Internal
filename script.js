@@ -388,7 +388,9 @@ function renderPage(index) {
 
         const strainSelect = document.getElementById(`strain_select_${question.questionNumber}`);
 
-        // Default selection = 3% strain (already selected)
+        // Default selection = 5% strain
+        strainSelect.value = "5_Strain_Cycle";
+
         updateStrainImage(question.questionNumber, question.testNumber);
 
         // Change image automatically when the user selects a different strain
