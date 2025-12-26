@@ -47,7 +47,9 @@ auth.onAuthStateChanged(async (user) => {
     document.getElementById("login-page").style.display = "none";
     document.getElementById("quiz-container").style.display = "block";
 
-    // Load saved responses FIRST
+    // 1) Seed from preload (only if user's doc doesn't exist)
+    // 2) Then load the user's actual doc
+    await seedFromPreloadIfNeeded();
     await loadExistingResponses();
 
     // Only load questions once
@@ -114,7 +116,8 @@ async function emailOnlyLogin() {
     console.log("Email-only login:", currentUser);
 
     // Load previous responses
-    await loadExistingResponsesByEmail(email);
+    responses = {};
+    console.log("Email-only mode: Firestore disabled (no auth).");  
 
     // SHOW QUIZ
     document.getElementById("login-page").style.display = "none";
@@ -532,6 +535,12 @@ function getMaxStd(mean) {
 async function saveProgressToFirestore() {
     if (!currentUser) return;
 
+    // ✅ Step 2B: do NOT write to Firestore in email-only mode
+    if (currentUser?.isLocalUser) {
+        console.log("Email-only mode: skipping Firestore auto-save.");
+        return;
+    }
+
     const name = document.getElementById("researcher-name")?.value || "";
 
     const payload = {
@@ -692,6 +701,12 @@ async function submitForm() {
 
     if (!currentUser) {
         alert("Please sign in first.");
+        return;
+    }
+
+    // ✅ Step 2B.2: email-only users cannot submit to Firestore
+    if (currentUser?.isLocalUser) {
+        alert("Email-only mode cannot submit to Firebase. Please use Google Sign-In.");
         return;
     }
 
