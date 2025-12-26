@@ -20,6 +20,9 @@ let currentUser = null;
 let cachedQuestions = [];
 let responses = {};
 
+function normalizeEmail(email) {
+    return (email || "").toLowerCase().trim();
+}
 
 // ------------------ AUTH STATE LISTENER ------------------
 
@@ -41,6 +44,7 @@ auth.onAuthStateChanged(async (user) => {
     document.getElementById("quiz-container").style.display = "block";
 
     // Load saved responses FIRST
+    await seedFromPreloadIfNeeded();
     await loadExistingResponses();
 
     // Only load questions once
@@ -49,6 +53,16 @@ auth.onAuthStateChanged(async (user) => {
     }
 });
 
+async function findUidByEmail(email) {
+    const snap = await db
+        .collection("responses_internal")
+        .where("email", "==", normalizeEmail(email))
+        .limit(1)
+        .get();
+
+    if (!snap.empty) return snap.docs[0].id;
+    return null;
+}
 
 // ------------------ GOOGLE LOGIN ------------------
 
@@ -87,9 +101,11 @@ async function emailOnlyLogin() {
     }
 
     // Create local-only user object
+    const existingUid = await findUidByEmail(email);
+
     currentUser = {
-        email: email,
-        uid: generateFakeUID(),
+        email: normalizeEmail(email),
+        uid: existingUid || generateFakeUID(),
         isLocalUser: true
     };
 
@@ -111,7 +127,7 @@ async function emailOnlyLogin() {
 // Load previous email-only responses
 async function loadExistingResponsesByEmail(email) {
     const snap = await db
-        .collection("responses")
+        .collection("responses_internal")
         .where("email", "==", email)
         .limit(1)
         .get();
@@ -128,6 +144,35 @@ async function loadExistingResponsesByEmail(email) {
     }
 }
 
+// ------------------ PRELOAD RESPONSES BY EMAIL ------------------
+async function seedFromPreloadIfNeeded() {
+    if (!currentUser?.uid || !currentUser?.email) return;
+
+    const userRef = db.collection("responses_internal").doc(currentUser.uid);
+    const userSnap = await userRef.get();
+
+    // Do NOT overwrite existing real responses
+    if (userSnap.exists) return;
+
+    const emailKey = normalizeEmail(currentUser.email);
+    const preloadRef = db.collection("preloads_internal").doc(emailKey);
+    const preloadSnap = await preloadRef.get();
+
+    if (!preloadSnap.exists) return;
+
+    const preload = preloadSnap.data();
+
+    await userRef.set({
+        uid: currentUser.uid,
+        email: emailKey,
+        name: preload.name || "",
+        responses: preload.responses || {},
+        seededFromPreload: true,
+        savedAt: new Date().toISOString()
+    }, { merge: true });
+
+    console.log("Preloaded responses seeded for", emailKey);
+}
 
 // ------------------ LOAD PREVIOUS RESPONSES ------------------
 
