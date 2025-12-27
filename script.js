@@ -181,51 +181,23 @@ async function loadExistingResponses() {
 
   const emailKey = normalizeEmail(currentUser.email);
 
-  // 1) Try new location (email-keyed doc)
-  const emailDocRef = db.collection("responses_internal").doc(emailKey);
-  const emailSnap = await emailDocRef.get();
+  try {
+    const emailDocRef = db.collection("responses_internal").doc(emailKey);
+    const emailSnap = await emailDocRef.get();
 
-  if (emailSnap.exists) {
-    const data = emailSnap.data();
-    responses = data.responses || {};
-    document.getElementById("researcher-name").value = data.name || "";
-    console.log("Loaded responses from EMAIL doc:", emailKey);
-    return;
-  }
-
-  // 2) Fallback: find old doc by querying email field (old UID-keyed docs)
-  // (This requires you stored `email` inside the doc previously.)
-  const qSnap = await db
-    .collection("responses_internal")
-    .where("email", "==", emailKey)
-    .limit(1)
-    .get();
-
-  if (qSnap.empty) {
+    if (emailSnap.exists) {
+      const data = emailSnap.data();
+      responses = data.responses || {};
+      document.getElementById("researcher-name").value = data.name || "";
+      console.log("Loaded responses from EMAIL doc:", emailKey);
+    } else {
+      responses = {};
+      console.log("No existing responses found for:", emailKey);
+    }
+  } catch (err) {
+    console.error("Failed to load responses:", err);
     responses = {};
-    console.log("No existing responses found (email doc missing + no legacy doc).");
-    return;
   }
-
-  // 3) Migrate legacy doc -> new email doc
-  const legacyDoc = qSnap.docs[0];
-  const legacyData = legacyDoc.data();
-
-  responses = legacyData.responses || {};
-  document.getElementById("researcher-name").value = legacyData.name || "";
-
-  await emailDocRef.set(
-    {
-      ...legacyData,
-      uid: emailKey,
-      email: emailKey,
-      migratedFromDocId: legacyDoc.id,
-      migratedAt: new Date().toISOString(),
-    },
-    { merge: true }
-  );
-
-  console.log("Migrated legacy doc", legacyDoc.id, "=>", emailKey);
 }
 
 
