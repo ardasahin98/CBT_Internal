@@ -177,21 +177,55 @@ async function seedFromPreloadIfNeeded() {
 // ------------------ LOAD PREVIOUS RESPONSES ------------------
 
 async function loadExistingResponses() {
-    if (!currentUser) return;
+  if (!currentUser) return;
 
-    const docRef = db.collection("responses_internal").doc(currentUser.uid);
-    const snap = await docRef.get();
+  const emailKey = normalizeEmail(currentUser.email);
 
-    if (snap.exists) {
-        responses = snap.data().responses || {};
-        const savedName = snap.data().name || "";
-        document.getElementById("researcher-name").value = savedName;
+  // 1) Try new location (email-keyed doc)
+  const emailDocRef = db.collection("responses_internal").doc(emailKey);
+  const emailSnap = await emailDocRef.get();
 
-        console.log("Loaded previous responses");
-    } else {
-        responses = {};
-        console.log("No existing responses found");
-    }
+  if (emailSnap.exists) {
+    const data = emailSnap.data();
+    responses = data.responses || {};
+    document.getElementById("researcher-name").value = data.name || "";
+    console.log("Loaded responses from EMAIL doc:", emailKey);
+    return;
+  }
+
+  // 2) Fallback: find old doc by querying email field (old UID-keyed docs)
+  // (This requires you stored `email` inside the doc previously.)
+  const qSnap = await db
+    .collection("responses_internal")
+    .where("email", "==", emailKey)
+    .limit(1)
+    .get();
+
+  if (qSnap.empty) {
+    responses = {};
+    console.log("No existing responses found (email doc missing + no legacy doc).");
+    return;
+  }
+
+  // 3) Migrate legacy doc -> new email doc
+  const legacyDoc = qSnap.docs[0];
+  const legacyData = legacyDoc.data();
+
+  responses = legacyData.responses || {};
+  document.getElementById("researcher-name").value = legacyData.name || "";
+
+  await emailDocRef.set(
+    {
+      ...legacyData,
+      uid: emailKey,
+      email: emailKey,
+      migratedFromDocId: legacyDoc.id,
+      migratedAt: new Date().toISOString(),
+    },
+    { merge: true }
+  );
+
+  console.log("Migrated legacy doc", legacyDoc.id, "=>", emailKey);
 }
 
 
